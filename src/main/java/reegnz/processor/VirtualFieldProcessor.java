@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
+import javax.annotation.Generated;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
@@ -34,6 +35,7 @@ import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic.Kind;
 
 import com.google.auto.service.AutoService;
+import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -123,7 +125,14 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 		return TypeSpec.interfaceBuilder(getNewClassName(type))
 				.addModifiers(Modifier.PUBLIC)
 				.addSuperinterface(TypeName.get(type.asType()))
+				.addAnnotation(generatedAnnotation())
 				.addOriginatingElement(type);
+	}
+
+	private AnnotationSpec generatedAnnotation() {
+		return AnnotationSpec.builder(Generated.class)
+		.addMember("value", "$S", this.getClass().getName())
+		.build();
 	}
 
 	private ClassName getNewClassName(TypeElement type) {
