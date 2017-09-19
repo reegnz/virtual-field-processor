@@ -19,7 +19,7 @@ public interface MyInterface {
 The following interface will be generated for you:
 
 ```java
-public interface VirtualMyInterface {
+public interface VirtualMyInterface extends MyInterface {
     MyInterface getMyInterface();
     @Override
     default void doStuff() {
