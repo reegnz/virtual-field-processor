@@ -41,6 +41,7 @@ import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.TypeVariableName;
 
 import reegnz.processor.api.VirtualField;
 
@@ -123,6 +124,7 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 
 	private TypeSpec.Builder getTypeSpec(TypeElement type) {
 		return TypeSpec.interfaceBuilder(getNewClassName(type))
+				.addTypeVariables(getTypeVariables(type))
 				.addModifiers(Modifier.PUBLIC)
 				.addSuperinterface(TypeName.get(type.asType()))
 				.addAnnotation(generatedAnnotation())
@@ -139,6 +141,12 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 		String newIfcName = getNewInterfaceName(type);
 		String packageName = elementUtils.getPackageOf(type).getQualifiedName().toString();
 		return ClassName.get(packageName, newIfcName);
+	}
+
+	private Iterable<TypeVariableName> getTypeVariables(TypeElement type) {
+		return type.getTypeParameters().stream()
+				.map(el -> TypeVariableName.get(el))
+				.collect(Collectors.toList());
 	}
 
 	private String getNewInterfaceName(TypeElement type) {
