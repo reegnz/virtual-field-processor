@@ -51,6 +51,7 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 	private Elements elementUtils;
 	private Filer filer;
 	private Messager messager;
+	private Set<String> objectMethods;
 
 	@Override
 	public SourceVersion getSupportedSourceVersion() {
@@ -70,6 +71,23 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 		elementUtils = processingEnv.getElementUtils();
 		filer = processingEnv.getFiler();
 		messager = processingEnv.getMessager();
+		objectMethods = getObjectMethodSignatures();
+	}
+
+	/**
+	 * Gets all java.lang.Object methods that are are possible to override.
+	 * @param name
+	 * @return
+	 */
+	private Set<String> getObjectMethodSignatures() {
+		return elementUtils.getTypeElement("java.lang.Object")
+				.getEnclosedElements().stream()
+				.filter(e -> e.getKind().equals(ElementKind.METHOD))
+				.map(ExecutableElement.class::cast)
+				.filter(e -> !e.getModifiers().contains(Modifier.STATIC))
+				.filter(e -> !e.getModifiers().contains(Modifier.FINAL))
+				.map(ExecutableElement::toString)
+				.collect(Collectors.toSet());
 	}
 
 	@Override
@@ -98,6 +116,7 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 		List<ExecutableElement> methods = element.getEnclosedElements().stream()
 				.filter(this::isMethod)
 				.map(ExecutableElement.class::cast)
+				.filter(e -> !objectMethods.contains(e.toString()))
 				.filter(this::isNotStatic)
 				.collect(toList());
 		generate(element, methods);
