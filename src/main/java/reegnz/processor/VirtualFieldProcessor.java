@@ -7,6 +7,7 @@ import static java.util.stream.Collectors.toList;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,7 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 	private Filer filer;
 	private Messager messager;
 	private Set<String> objectMethods;
+	private boolean debug;
 
 	@Override
 	public SourceVersion getSupportedSourceVersion() {
@@ -66,12 +68,18 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 	}
 
 	@Override
+	public Set<String> getSupportedOptions() {
+		return new HashSet<>(Arrays.asList("debug"));
+	}
+
+	@Override
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		super.init(processingEnv);
 		elementUtils = processingEnv.getElementUtils();
 		filer = processingEnv.getFiler();
 		messager = processingEnv.getMessager();
 		objectMethods = getObjectMethodSignatures();
+		debug = processingEnv.getOptions().containsKey("debug");
 	}
 
 	/**
@@ -105,14 +113,16 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 
 	private void processElement(Element element) {
 		if (!element.getKind().equals(ElementKind.INTERFACE)) {
-			error(element, "Only interfaces are allowed to be annotated with %s",
-					VirtualField.class.getCanonicalName());
+			AnnotationMirror annotationMirror = getAnnotationMirror(element, VirtualField.class);
+			error(element, annotationMirror, "The annotation @%s is disallowed for this location.",
+					VirtualField.class.getSimpleName());
 			return;
 		}
 		procesTypeElement(TypeElement.class.cast(element));
 	}
 
 	private void procesTypeElement(TypeElement element) {
+		note("Processing type %s", element);
 		List<ExecutableElement> methods = element.getEnclosedElements().stream()
 				.filter(this::isMethod)
 				.map(ExecutableElement.class::cast)
@@ -134,10 +144,12 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 		TypeSpec typeSpec = getTypeSpec(type).addMethods(getMethodSpecs(type, methods)).build();
 		String packageName = elementUtils.getPackageOf(type).getQualifiedName().toString();
 		JavaFile javaFile = JavaFile.builder(packageName, typeSpec).indent("    ").build();
+		String typeName = javaFile.packageName + "." + javaFile.typeSpec.name;
 		try {
+			note("Writing source of %s", typeName);
 			javaFile.writeTo(filer);
 		} catch (IOException e) {
-			throw new RuntimeException(e);
+			error("Failed to write class %s. Reason: %s", typeName, e);
 		}
 	}
 
@@ -159,13 +171,17 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 	private ClassName getNewClassName(TypeElement type) {
 		String newIfcName = getNewInterfaceName(type);
 		String packageName = elementUtils.getPackageOf(type).getQualifiedName().toString();
-		return ClassName.get(packageName, newIfcName);
+		ClassName className = ClassName.get(packageName, newIfcName);
+		note("Generated class name is %s", className);
+		return className;
 	}
 
 	private Iterable<TypeVariableName> getTypeVariables(TypeElement type) {
-		return type.getTypeParameters().stream()
+		Iterable<TypeVariableName> typeVariables = type.getTypeParameters().stream()
 				.map(el -> TypeVariableName.get(el))
 				.collect(Collectors.toList());
+		note("Type variables for class are: %s", typeVariables);
+		return typeVariables;
 	}
 
 	private String getNewInterfaceName(TypeElement type) {
@@ -187,9 +203,11 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 				.returns(superTypeName)
 				.build();
 		specs.add(delegate);
-		return methods.stream()
+		methods.stream()
 				.map(method -> convertToSpec(method, delegateMethodName))
 				.collect(toCollection(() -> specs));
+		note("The following methods will have default methods generated for them: %s", methods);
+		return specs;
 	}
 
 	private MethodSpec convertToSpec(ExecutableElement method, String delegateMethodName) {
@@ -266,7 +284,22 @@ public class VirtualFieldProcessor extends AbstractProcessor {
 		return method.getReturnType().getKind().equals(TypeKind.VOID);
 	}
 
-	private void error(Element element, String message, Object... args) {
-		messager.printMessage(Kind.ERROR, String.format(message, args), element);
+	private void error(String message, Object...args) {
+		messager.printMessage(Kind.ERROR, formatMessage(message, args));
+	}
+
+	private void error(Element element, AnnotationMirror annotation, String message, Object...args) {
+		messager.printMessage(Kind.ERROR, formatMessage(message, args), element, annotation);
+	}
+
+	private void note(String message, Object...args) {
+		if(!debug) {
+			return;
+		}
+		messager.printMessage(Kind.NOTE, formatMessage(message, args));
+	}
+
+	private String formatMessage(String message, Object... args) {
+		return String.format("VirtualFieldProcessor: " + message, args);
 	}
 }
